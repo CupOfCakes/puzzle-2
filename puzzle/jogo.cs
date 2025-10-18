@@ -1,15 +1,8 @@
-﻿using puzzle;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Drawing.Text;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using static System.Net.Mime.MediaTypeNames;
+using puzzle.utils;
 
 namespace puzzle
 {
@@ -17,7 +10,7 @@ namespace puzzle
     {
         private dadosJogo dados;
         private bool arrastando = false;
-        private PictureBox pecaAtual = null;
+        private PictureBox pecaSelecionada = null;
         private Point offset;
         List<PointF> encaixes = new List<PointF>();
         Point pontoTela;
@@ -29,22 +22,21 @@ namespace puzzle
         {
             InitializeComponent();
             this.WindowState = FormWindowState.Maximized;
-            //this.FormBorderStyle = FormBorderStyle.None;
 
-            dados = dados;
+            this.dados = dados;
 
             tela dadosTela = new tela(dados.imgPath);
 
-            var (larguraPeca, alturaPeca, colunas, linhas) = larguraPeca_alturaPeca_colunas_linhas(dados.dificuldade, dadosTela.image);
+            var (larguraPeca, alturaPeca, colunas, linhas) = CalcularDimensoesPecas(dados.dificuldade, dadosTela.image);
 
-            List<Bitmap> pecas = separarPecas(dadosTela.image, larguraPeca, alturaPeca, colunas, linhas);
+            List<Bitmap> pecas = separarImagemEmPecas(dadosTela.image, larguraPeca, alturaPeca, colunas, linhas);
 
-            
+
             //fundo cinza
             fundoCinza = new Panel();
+
+            fundoCinza.Size = new Size(dadosTela.imgLargura, dadosTela.imgAltura);
             
-            fundoCinza.Size = new System.Drawing.Size(dadosTela.imgLargura, dadosTela.imgAltura);
-            fundoCinza.BackColor = System.Drawing.Color.Gray;
 
             this.Controls.Add(fundoCinza);
 
@@ -52,20 +44,26 @@ namespace puzzle
             int centroY = (this.ClientSize.Height - fundoCinza.Height) / 2;
 
             fundoCinza.Anchor = AnchorStyles.None;
-            fundoCinza.Location = new System.Drawing.Point(centroX, centroY);
+            fundoCinza.Location = new Point(centroX, centroY);
 
             if (dados.imgAjuda)
             {
-                Bitmap imgPB = ConverterImagemParaPretoEBranco(System.Drawing.Image.FromFile(dados.imgPath));
-                fundoCinza.BackgroundImage = imgPB;
+                Bitmap imgPB = imagemUtils.ConverterImagemParaPretoEBranco(Image.FromFile(dados.imgPath));
+                Bitmap imgPBR = imagemUtils.redimensionarImagem(imgPB, dadosTela.imgLargura, dadosTela.imgAltura);
+                fundoCinza.BackgroundImage = imgPBR;
+            }
+            else
+            {
+                fundoCinza.BackColor = Color.Gray;
             }
 
-            //encaixes
-            for (int i = 0; i < linhas; i++)
+                //encaixes
+                for (int i = 0; i < linhas; i++)
             {
+                float y = i * alturaPeca;
                 for (int j = 0; j < colunas; j++)
                 {
-                    encaixes.Add(new PointF(j * larguraPeca, i * alturaPeca));
+                    encaixes.Add(new PointF(j * larguraPeca, y));
                 }
             }
 
@@ -74,7 +72,7 @@ namespace puzzle
                 Panel marcador = new Panel();
                 marcador.Size = new Size((int)larguraPeca, (int)alturaPeca);
                 marcador.Location = new Point((int)ponto.X, (int)ponto.Y);
-                marcador.BackColor = System.Drawing.Color.Transparent;
+                marcador.BackColor = Color.Transparent;
                 marcador.BorderStyle = BorderStyle.FixedSingle;
                 marcador.ForeColor = Color.Cyan;
                 pontoTela = fundoCinza.PointToScreen(Point.Round(ponto));
@@ -83,7 +81,7 @@ namespace puzzle
                 fundoCinza.Controls.Add(marcador);
                 marcador.BringToFront();
 
-                
+
             }
 
             //arasto das peças
@@ -127,49 +125,29 @@ namespace puzzle
                 pecasControle.Add(peca);
             }
 
-            
-
-
 
         }
 
-        public static Bitmap ConverterImagemParaPretoEBranco(System.Drawing.Image original)
-        {
-            Bitmap pretoBranco = new Bitmap(original.Width, original.Height);
-
-            for (int y = 0; y < original.Height; y++)
-            {
-                for (int x = 0; x < original.Width; x++)
-                {
-                    Color corOriginal = ((Bitmap)original).GetPixel(x, y);
-
-                    // Calcula o tom de cinza (média ponderada)
-                    int cinza = (int)(corOriginal.R * 0.3 + corOriginal.G * 0.59 + corOriginal.B * 0.11);
-
-                    Color corCinza = Color.FromArgb(cinza, cinza, cinza);
-                    pretoBranco.SetPixel(x, y, corCinza);
-                }
-            }
-
-            return pretoBranco;
-        }
+        
 
 
         private void Peca_MouseDown(object sender, MouseEventArgs e)
         {
             arrastando = true;
-            pecaAtual = sender as PictureBox;
+            pecaSelecionada = sender as PictureBox;
             offset = e.Location;
-            pecaAtual.BringToFront();
+            pecaSelecionada.BringToFront();
         }
 
         private void Peca_MouseMove(object sender, MouseEventArgs e)
         {
-            if (arrastando && pecaAtual != null)
+            if (arrastando && pecaSelecionada != null)
             {
                 Point posicaoMouse = PointToClient(Cursor.Position);
-                pecaAtual.Left = posicaoMouse.X - offset.X;
-                pecaAtual.Top = posicaoMouse.Y - offset.Y;
+                this.SuspendLayout();
+                pecaSelecionada.Left = posicaoMouse.X - offset.X;
+                pecaSelecionada.Top = posicaoMouse.Y - offset.Y;
+                this.ResumeLayout();
             }
         }
 
@@ -177,25 +155,26 @@ namespace puzzle
         {
             arrastando = false;
             EncaixarPeca();
-            pecaAtual = null;
+            pecaSelecionada = null;
         }
 
         private void EncaixarPeca()
         {
             int margem = 10; // tolerância
 
+
             foreach (var ponto in encaixes)
             {
-                // Converte o ponto de encaixe para coordenadas do formulário
                 Point pontoTela = fundoCinza.PointToScreen(Point.Round(ponto));
                 Point pontoForm = this.PointToClient(pontoTela);
 
-                if (Math.Abs(pecaAtual.Left - pontoForm.X) <= margem &&
-                    Math.Abs(pecaAtual.Top - pontoForm.Y) <= margem)
+                if (Math.Abs(pecaSelecionada.Left - pontoForm.X) <= margem &&
+                    Math.Abs(pecaSelecionada.Top - pontoForm.Y) <= margem)
                 {
-                    pecaAtual.Left = pontoForm.X;
-                    pecaAtual.Top = pontoForm.Y;
-                    break; // encaixou, não precisa continuar
+                    // Encaixa diretamente no ponto convertido
+                    pecaSelecionada.Left = pontoForm.X;
+                    pecaSelecionada.Top = pontoForm.Y;
+                    break;
                 }
             }
         }
@@ -203,7 +182,7 @@ namespace puzzle
 
 
 
-        static (float larguraPeca, float alturaPeca, int colunas, int linhas) larguraPeca_alturaPeca_colunas_linhas(String dificuldade, Bitmap img)
+        static (float larguraPeca, float alturaPeca, int colunas, int linhas) CalcularDimensoesPecas(String dificuldade, Bitmap img)
         {
             int linhas = 0, colunas = 0;
 
@@ -233,19 +212,21 @@ namespace puzzle
 
         }
 
-    
-    public static List<Bitmap> separarPecas(Bitmap img, float larguraPeca, float alturaPeca, int colunas, int linhas)
+
+        public static List<Bitmap> separarImagemEmPecas(Bitmap img, float larguraPeca, float alturaPeca, int colunas, int linhas)
         {
-  
+
             List<Bitmap> pecas = new List<Bitmap>();
 
             for (int i = 0; i < linhas; i++)
             {
+                float y = i * alturaPeca;
+
                 for (int j = 0; j < colunas; j++)
                 {
                     RectangleF box = new RectangleF(
                         j * larguraPeca,
-                        i * alturaPeca,
+                        y,
                         larguraPeca,
                         alturaPeca
                     );
@@ -259,9 +240,6 @@ namespace puzzle
 
         }
 
-
-
-
-
     }
 }
+
